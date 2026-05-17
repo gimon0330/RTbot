@@ -1,0 +1,12 @@
+{
+  "token": "YOUR_DISCORD_BOT_TOKEN",
+  "command_prefix": "알티야 ",
+  "db": {
+    "host": "localhost",
+    "user": "rtbot_user",
+    "password": "rtbot_password",
+    "db": "rtbot",
+    "charset": "utf8mb4",
+    "maxsize": 20
+  }
+}
