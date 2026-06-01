@@ -17,6 +17,7 @@ def _normalize_args(args):
 
 
 def _convert_placeholders(query):
+    query = re.sub(r'"([0-9]+)"', r"'\1'", query)
     index = 0
 
     def replace(_match):
