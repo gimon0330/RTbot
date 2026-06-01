@@ -57,7 +57,7 @@ class reg(commands.Cog):
             if e == '<a:yes:698461934198063104>':
                 async with self.pool.acquire() as conn:
                     async with conn.cursor(aiomysql.DictCursor) as cur:
-                        await cur.execute('INSERT INTO userdata VALUES(%s, "5000", 0, 0, 0)', ctx.author.id)
+                        await cur.execute('INSERT INTO userdata VALUES(%s, %s, 0, 0, 0)', (ctx.author.id, '5000'))
                 await asyncio.gather(
                     msg.delete(),
                     ctx.send(embed=get_embed('<a:yes:698461934198063104> | 가입에 성공했습니다!',"", 0xCCFFFF))
