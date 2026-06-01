@@ -2,11 +2,12 @@
   "token": "YOUR_DISCORD_BOT_TOKEN",
   "command_prefix": "알티야 ",
   "db": {
+    "url": "postgresql://USER:PASSWORD@HOST:5432/DATABASE",
     "host": "localhost",
+    "port": 5432,
     "user": "rtbot_user",
     "password": "rtbot_password",
-    "db": "rtbot",
-    "charset": "utf8mb4",
+    "database": "rtbot",
     "maxsize": 20
   }
 }
