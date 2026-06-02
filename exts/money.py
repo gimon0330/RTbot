@@ -284,5 +284,5 @@ class money(commands.Cog):
                 fetch = await cur.fetchone()
         await ctx.send(embed=get_embed(f"💳 | {ctx.author} 님의 은행잔고",f"{fetch['bank']} 원"))
 
-def setup(client):
-    client.add_cog(money(client))
+async def setup(client):
+    await client.add_cog(money(client))
