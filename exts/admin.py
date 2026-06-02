@@ -244,5 +244,5 @@ class admincmds(commands.Cog):
         await ctx.send(file=logfile)
 
 
-def setup(client):
-    client.add_cog(admincmds(client))
+async def setup(client):
+    await client.add_cog(admincmds(client))
