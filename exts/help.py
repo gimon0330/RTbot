@@ -47,5 +47,5 @@ class _help(commands.Cog):
 **알티야 낚시** : 낚시를 합니다. (개발중인 명령어)""")
         await ctx.send(embed=embed)
 
-def setup(client):
-    client.add_cog(_help(client))
+async def setup(client):
+    await client.add_cog(_help(client))
