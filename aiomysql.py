@@ -8,6 +8,27 @@ class DictCursor:
     pass
 
 
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS userdata (
+  id BIGINT PRIMARY KEY,
+  money TEXT NOT NULL DEFAULT '5000',
+  bank TEXT NOT NULL DEFAULT '0',
+  adminuser INTEGER NOT NULL DEFAULT 0,
+  blacklist INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS reinforce (
+  uuid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  id BIGINT NOT NULL,
+  level INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_reinforce_user_id ON reinforce(id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reinforce_user_item ON reinforce(id, name);
+"""
+
+
 def _normalize_args(args):
     if args is None:
         return []
@@ -26,6 +47,11 @@ def _convert_placeholders(query):
         return f"${index}"
 
     return re.sub(r"%s", replace, query)
+
+
+async def _ensure_schema(pool):
+    async with pool.acquire() as connection:
+        await connection.execute(SCHEMA_SQL)
 
 
 class Cursor:
@@ -117,4 +143,5 @@ async def create_pool(
             max_size=maxsize,
             ssl=ssl,
         )
+    await _ensure_schema(pool)
     return Pool(pool)
