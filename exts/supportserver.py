@@ -20,5 +20,5 @@ class supportserver(commands.Cog):
         greetings = member.guild.get_channel(680707161290047489)
         await greetings.send(embed=discord.Embed(title='👋 안녕히가세요-', description=f'{member.name}님이 나갔습니다.', color=0xccffff))
 
-def setup(client):
-    client.add_cog(supportserver(client))
+async def setup(client):
+    await client.add_cog(supportserver(client))
