@@ -67,7 +67,6 @@ def load_config() -> dict:
 
 
 config = load_config()
-loop = asyncio.get_event_loop()
 
 
 async def connect_db():
@@ -76,32 +75,34 @@ async def connect_db():
 
 def build_intents():
     intents = discord.Intents.default()
-    if hasattr(intents, "message_content"):
-        intents.message_content = True
+    intents.message_content = True
+    intents.members = True
     return intents
 
 
-pool = loop.run_until_complete(connect_db())
+async def main():
+    pool = await connect_db()
 
-client = commands.AutoShardedBot(
-    command_prefix=config["command_prefix"],
-    intents=build_intents(),
-)
-client.pool = pool
+    client = commands.AutoShardedBot(
+        command_prefix=config["command_prefix"],
+        intents=build_intents(),
+    )
+    client.pool = pool
+
+    for ext_path in sorted(DEFAULT_EXTENSIONS_DIR.glob("*.py")):
+        if ext_path.name.startswith("_"):
+            continue
+
+        ext_name = f"exts.{ext_path.stem}"
+
+        try:
+            await client.load_extension(ext_name)
+        except Exception as exc:
+            print(f"[WARN] Failed to load extension {ext_name}: {exc.__class__.__name__}: {exc}")
+        else:
+            print(f"[OK] Loaded extension {ext_name}")
+
+    await client.start(config["token"])
 
 
-for ext_path in sorted(DEFAULT_EXTENSIONS_DIR.glob("*.py")):
-    if ext_path.name.startswith("_"):
-        continue
-
-    ext_name = f"exts.{ext_path.stem}"
-
-    try:
-        client.load_extension(ext_name)
-    except Exception as exc:
-        print(f"[WARN] Failed to load extension {ext_name}: {exc.__class__.__name__}: {exc}")
-    else:
-        print(f"[OK] Loaded extension {ext_name}")
-
-
-client.run(config["token"])
+asyncio.run(main())
