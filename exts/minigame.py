@@ -344,5 +344,5 @@ class minigame(commands.Cog):
         self.gaming_list.remove(ctx.author.id)
         return
 
-def setup(client):
-    client.add_cog(minigame(client))
+async def setup(client):
+    await client.add_cog(minigame(client))
