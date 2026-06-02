@@ -151,5 +151,5 @@ class chat(commands.Cog):
     async def chat_cheowkd(self, ctx):
         await ctx.send(embed=get_embed("📋 | 알티봇 초대",">>> [알티봇 다른서버에 초대하기!](https://discordapp.com/api/oauth2/authorize?client_id=661477460390707201&permissions=8&scope=bot)\n\n[알티봇 서포트 서버!](https://discord.gg/hTZxtbC)"))
 
-def setup(client):
-    client.add_cog(chat(client))
+async def setup(client):
+    await client.add_cog(chat(client))
