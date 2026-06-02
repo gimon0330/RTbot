@@ -230,5 +230,5 @@ class reinforce(commands.Cog):
             if a>=6: break
         await ctx.send(embed=get_embed(":bar_chart: | 서버 강화 순위","".join(alis)))
 
-def setup(client):
-    client.add_cog(reinforce(client))
+async def setup(client):
+    await client.add_cog(reinforce(client))
