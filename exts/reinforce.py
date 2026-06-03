@@ -8,9 +8,56 @@ from discord.ext import commands
 from utils import checks
 from utils.views import ask_confirm
 
+STAR_LEVEL_BASE = 100
+DESTROY_LEVEL = 90
+
 
 def get_embed(title, description='', color=0xCCFFFF):
     return discord.Embed(title=title, description=description, color=color)
+
+
+def star_count(level: int) -> int:
+    if level < STAR_LEVEL_BASE:
+        return 0
+    return level - STAR_LEVEL_BASE
+
+
+def star_icons(stars: int) -> str:
+    if stars <= 0:
+        return ''
+    big_stars, small_stars = divmod(stars, 5)
+    return '🌟' * big_stars + '⭐' * small_stars
+
+
+def item_label(name: str, level: int) -> str:
+    stars = star_count(level)
+    if stars <= 0:
+        return f'{name} (Lv. {level})'
+    return f'{name} {star_icons(stars)} (Lv. {level}, {stars}성)'
+
+
+def star_rate(stars: int):
+    rates = {
+        0: (90, 10, 0),
+        1: (80, 20, 0),
+        2: (70, 30, 0),
+        3: (60, 40, 0),
+        4: (50, 50, 0),
+        5: (40, 50, 10),
+        6: (30, 50, 20),
+        7: (20, 50, 30),
+    }
+    return rates.get(stars, (10, 50, 40))
+
+
+def roll_starforce(stars: int):
+    success, fail, destroy = star_rate(stars)
+    roll = randint(1, 100)
+    if roll <= success:
+        return 'success', success, fail, destroy
+    if roll <= success + fail:
+        return 'fail', success, fail, destroy
+    return 'destroy', success, fail, destroy
 
 
 class reinforce(commands.Cog):
@@ -44,31 +91,40 @@ class reinforce(commands.Cog):
                 await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s', (user, weapon))
                 row = await cur.fetchone()
                 level = int(row['level'])
+                current_label = item_label(weapon, level)
 
-                if level >= 100:
+                if level >= STAR_LEVEL_BASE:
+                    stars = star_count(level)
+                    success, fail, destroy = star_rate(stars)
+                    destroy_text = f' / 파괴 {destroy}%' if destroy else ''
                     confirmed, _ = await ask_confirm(
                         ctx,
                         embed=get_embed(
-                            '특수 강화',
-                            '100레벨 이상 아이템입니다.\n성공: 50% 확률로 5~20레벨 상승\n실패: 80레벨로 하락\n도전하시겠습니까?',
+                            '스타강화',
+                            f'{current_label}\n\n{stars}성 → {stars + 1}성\n성공 {success}% / 실패 {fail}%{destroy_text}\n\n도전하시겠습니까?',
                         ),
                         timeout=30,
                     )
                     if confirmed is None:
-                        await ctx.send(embed=get_embed('시간 초과', '특수 강화가 취소되었습니다.', 0xFF0000))
+                        await ctx.send(embed=get_embed('시간 초과', '스타강화가 취소되었습니다.', 0xFF0000))
                         return
                     if confirmed is False:
-                        await ctx.send(embed=get_embed('취소됨', '특수 강화가 취소되었습니다.', 0xFF0000))
+                        await ctx.send(embed=get_embed('취소됨', '스타강화가 취소되었습니다.', 0xFF0000))
                         return
 
-                    if randint(0, 1) == 1:
-                        gain = randint(5, 20)
-                        new_level = level + gain
+                    result, success, fail, destroy = roll_starforce(stars)
+                    if result == 'success':
+                        new_level = level + 1
                         await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
-                        await ctx.send(embed=get_embed('특수 강화 성공', f'{weapon}이 {gain}레벨 성장했습니다.\n현재 레벨: {new_level}'))
+                        await ctx.send(embed=get_embed('스타강화 성공', f'{item_label(weapon, new_level)}\n{stars}성 → {stars + 1}성'))
+                    elif result == 'fail':
+                        new_level = max(STAR_LEVEL_BASE, level - 1)
+                        await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
+                        await ctx.send(embed=get_embed('스타강화 실패', f'{item_label(weapon, new_level)}\n{stars}성 → {star_count(new_level)}성', 0xFF0000))
                     else:
-                        await cur.execute('UPDATE reinforce SET level = 80 WHERE id = %s and name = %s', (ctx.author.id, weapon))
-                        await ctx.send(embed=get_embed('특수 강화 실패', f'{weapon}이 80레벨로 하락했습니다.', 0xFF0000))
+                        new_level = DESTROY_LEVEL
+                        await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
+                        await ctx.send(embed=get_embed('스타강화 파괴', f'{weapon}이 파괴되어 0성 90레벨로 돌아갔습니다.\n{item_label(weapon, new_level)}', 0xFF0000))
                     return
 
                 rand = randint(0, 100) - level
@@ -76,12 +132,12 @@ class reinforce(commands.Cog):
                     gain = randint(2, 10)
                     new_level = level + gain
                     await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
-                    await ctx.send(embed=get_embed('강화 성공', f'{weapon}이 {gain}레벨 성장했습니다.\n현재 레벨: {new_level}'))
+                    await ctx.send(embed=get_embed('강화 성공', f'{item_label(weapon, new_level)}\n{gain}레벨 성장했습니다.'))
                 else:
                     loss = randint(1, 5)
                     new_level = level - loss
                     await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
-                    await ctx.send(embed=get_embed('강화 실패', f'{weapon}이 {loss}레벨 하락했습니다.\n현재 레벨: {new_level}', 0xFF0000))
+                    await ctx.send(embed=get_embed('강화 실패', f'{item_label(weapon, new_level)}\n{loss}레벨 하락했습니다.', 0xFF0000))
 
     @_reinforce.command(name='목록', aliases=['물품', '리스트'])
     async def _rf_list(self, ctx):
@@ -92,7 +148,7 @@ class reinforce(commands.Cog):
         if not rows:
             await ctx.send(embed=get_embed('강화 목록', '아직 강화 아이템이 없습니다.'))
             return
-        text = '\n'.join(f"Lv {row['level']}  {row['name']}" for row in rows)
+        text = '\n'.join(item_label(row['name'], int(row['level'])) for row in rows)
         await ctx.send(embed=get_embed(f'{ctx.author} 님의 강화 목록', text))
 
     @_reinforce.command(name='삭제')
@@ -106,10 +162,11 @@ class reinforce(commands.Cog):
                 await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
                 row = await cur.fetchone()
                 level = int(row['level'])
+                label = item_label(arg, level)
 
                 confirmed, _ = await ask_confirm(
                     ctx,
-                    embed=get_embed('강화 삭제', f'Lv.{level} {arg}\n정말 삭제하시겠습니까?'),
+                    embed=get_embed('강화 삭제', f'{label}\n정말 삭제하시겠습니까?'),
                     timeout=30,
                 )
                 if confirmed is None:
@@ -120,7 +177,7 @@ class reinforce(commands.Cog):
                     return
 
                 await cur.execute('DELETE FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
-        await ctx.send(embed=get_embed('삭제 완료'))
+        await ctx.send(embed=get_embed('삭제 완료', label))
 
     @_reinforce.command(name='판매')
     async def _rf_sell(self, ctx, *, arg):
@@ -138,9 +195,10 @@ class reinforce(commands.Cog):
                     return
 
                 price = 2 ** (level - 45)
+                label = item_label(arg, level)
                 confirmed, _ = await ask_confirm(
                     ctx,
-                    embed=get_embed('강화 판매', f'Lv.{level} {arg}\n판매가: {price:,}원\n정말 판매하시겠습니까?'),
+                    embed=get_embed('강화 판매', f'{label}\n판매가: {price:,}원\n정말 판매하시겠습니까?'),
                     timeout=30,
                 )
                 if confirmed is None:
@@ -155,7 +213,7 @@ class reinforce(commands.Cog):
                 money_row = await cur.fetchone()
                 money = int(money_row['money'])
                 await cur.execute('UPDATE userdata SET money = %s WHERE id = %s', (str(money + price), ctx.author.id))
-        await ctx.send(embed=get_embed('판매 완료', f'{price:,}원이 지급되었습니다.'))
+        await ctx.send(embed=get_embed('판매 완료', f'{label}\n{price:,}원이 지급되었습니다.'))
 
     @_reinforce.group(name='순위', invoke_without_command=True)
     async def _rf_rank(self, ctx):
@@ -174,7 +232,7 @@ class reinforce(commands.Cog):
                 ranking.append([member.name, row['name'], int(row['level'])])
             if len(ranking) >= 6:
                 break
-        text = '\n\n'.join(f'{idx + 1}위 | {name}\nLv{level} {item}' for idx, (name, item, level) in enumerate(ranking))
+        text = '\n\n'.join(f'{idx + 1}위 | {name}\n{item_label(item, level)}' for idx, (name, item, level) in enumerate(ranking))
         await ctx.send(embed=get_embed('서버 강화 순위', text or '표시할 강화 기록이 없습니다.'))
 
     @_rf_rank.command(name='전체')
@@ -187,7 +245,7 @@ class reinforce(commands.Cog):
         for row in rows:
             user = self.client.get_user(int(row['id']))
             ranking.append([user.name if user else str(row['id']), row['name'], int(row['level'])])
-        text = '\n\n'.join(f'{idx + 1}위 | {name}\nLv{level} {item}' for idx, (name, item, level) in enumerate(ranking))
+        text = '\n\n'.join(f'{idx + 1}위 | {name}\n{item_label(item, level)}' for idx, (name, item, level) in enumerate(ranking))
         await ctx.send(embed=get_embed('전체 강화 순위', text or '표시할 강화 기록이 없습니다.'))
 
 
