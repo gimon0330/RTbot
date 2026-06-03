@@ -99,21 +99,28 @@ def normal_gain(level: int) -> int:
 def normal_loss(level: int) -> int:
     if level < 30:
         return random.choices(
-            [1, 2, 3],
-            weights=[70, 25, 5],
+            [1, 2],
+            weights=[85, 15],
             k=1,
         )[0]
 
     if level < 70:
         return random.choices(
-            [1, 2, 3, 4, 5],
-            weights=[20, 25, 25, 20, 10],
+            [1, 2, 3, 4],
+            weights=[35, 30, 25, 10],
+            k=1,
+        )[0]
+
+    if level < 90:
+        return random.choices(
+            [1, 2, 3],
+            weights=[50, 35, 15],
             k=1,
         )[0]
 
     return random.choices(
-        [1, 2, 3, 4],
-        weights=[45, 30, 20, 5],
+        [1, 2, 3],
+        weights=[65, 30, 5],
         k=1,
     )[0]
 
