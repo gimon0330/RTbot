@@ -209,6 +209,21 @@ class reinforce(commands.Cog):
             return '완전보호권', 'hold'
         return None, None
 
+    async def send_server_rank(self, ctx):
+        ranking = []
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute('SELECT * FROM reinforce ORDER BY level DESC')
+                rows = await cur.fetchall()
+        for row in rows:
+            member = ctx.guild.get_member(int(row['id']))
+            if member is not None:
+                ranking.append([member.name, row['name'], int(row['level'])])
+            if len(ranking) >= 6:
+                break
+        text = '\n\n'.join(f'{idx + 1}위 | {name}\n{item_label(item, level)}' for idx, (name, item, level) in enumerate(ranking))
+        await ctx.send(embed=get_embed('📊 서버 강화 순위', text or '표시할 강화 기록이 없습니다.'))
+
     @commands.group(name='강화', aliases=['강'], invoke_without_command=True)
     @commands.cooldown(1, 1, commands.BucketType.user)
     async def _reinforce(self, ctx, *, weapon):
@@ -388,23 +403,11 @@ class reinforce(commands.Cog):
 
     @_reinforce.group(name='순위', invoke_without_command=True)
     async def _rf_rank(self, ctx):
-        await ctx.send(embed=get_embed('📊 올바르지 않은 명령어입니다.', '알티야 강화 순위 서버/전체로 사용해주세요.', 0xFF0000))
+        await self.send_server_rank(ctx)
 
     @_rf_rank.command(name='서버')
     async def _rf_list_server(self, ctx):
-        ranking = []
-        async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute('SELECT * FROM reinforce ORDER BY level DESC')
-                rows = await cur.fetchall()
-        for row in rows:
-            member = ctx.guild.get_member(int(row['id']))
-            if member is not None:
-                ranking.append([member.name, row['name'], int(row['level'])])
-            if len(ranking) >= 6:
-                break
-        text = '\n\n'.join(f'{idx + 1}위 | {name}\n{item_label(item, level)}' for idx, (name, item, level) in enumerate(ranking))
-        await ctx.send(embed=get_embed('📊 서버 강화 순위', text or '표시할 강화 기록이 없습니다.'))
+        await self.send_server_rank(ctx)
 
     @_rf_rank.command(name='전체')
     async def _rf_list_all(self, ctx):
