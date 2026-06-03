@@ -1,9 +1,10 @@
 import discord
-from discord.ext import commands 
+from discord.ext import commands
+
 
 def get_embed(title, description='', color=0xCCFFFF):
-    embed=discord.Embed(title=title,description=description,color=color)
-    return embed
+    return discord.Embed(title=title, description=description, color=color)
+
 
 class _help(commands.Cog):
     def __init__(self, client):
@@ -11,41 +12,92 @@ class _help(commands.Cog):
 
     @commands.group(name='도움', aliases=['명령어', '도움말'], invoke_without_command=True)
     async def _help(self, ctx):
-        embed=get_embed("\📌 | **RTBOT 명령어**")
-        embed.add_field(name='📝 | **정보**',value='`알티야 정보`,`알티야 프사`,`알티야 유저`,`알티야 프로필`,`알티야 핑`,`알티야 공지채널`',inline=False)
-        embed.add_field(name='💰 | **도박**',value='`알티야 도박`,`알티야 저금`,`알티야 인출`,`알티야 내돈`,`알티야 은행잔고`,`알티야 돈내놔`,`알티야 돈줘`',inline=False)
-        embed.add_field(name='💻 | **미니게임**',value='`알티야 강화 (물품/목록/삭제/판매)`,`알티야 가위바위보`,`알티야 슬롯`',inline=False)
-        embed.add_field(name='❓ | **도움말**',value='`알티야 도움 (정보,도박,미니게임)`',inline=False)
+        embed = get_embed('📌 | RTBOT 명령어')
+        embed.add_field(
+            name='📝 정보',
+            value='`핑`, `정보`, `유저`, `주사위`, `업타임`, `프로필`, `프사`, `초대장`, `투표`, `문의`',
+            inline=False,
+        )
+        embed.add_field(
+            name='💰 경제',
+            value='`가입`, `탈퇴`, `내돈`, `내돈 한글`, `돈내놔`, `송금`, `저금`, `저금 전체`, `인출`, `인출 전체`, `은행잔고`, `돈순위`, `돈순위 서버`, `도박`, `도박 전체`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🎮 게임 / 강화',
+            value='`숫자맞추기`, `슬롯`, `강화`, `강화 목록`, `강화 삭제`, `강화 판매`, `강화 순위 서버`, `강화 순위 전체`',
+            inline=False,
+        )
+        embed.add_field(
+            name='❓ 자세히 보기',
+            value='`알티야 도움 정보`, `알티야 도움 경제`, `알티야 도움 게임`, `알티야 도움 관리자`',
+            inline=False,
+        )
         await ctx.send(embed=embed)
-    
+
     @_help.command(name='정보')
-    async def _help_1(self, ctx):
-        embed=get_embed("\📝 | **정보 명령어**","""**알티야 정보** : 알티봇의 정보를 보여줍니다
-**알티야 프사** : 멘션한 사람의 프사를 가져옵니다 (비우면 본인)
-**알티야 유저** : 알티봇의 게임중인 유저수를 보여줍니다.
-**알티야 프로필** : 멘션한 사람의 프로필을 가져옵니다 (비우면 본인)
-**알티야 핑** : 알티봇의 핑을 보여줍니다.
-**알티야 공지채널** : 알티봇의 전체 공지채널을 설정합니다.""")
+    async def _help_info(self, ctx):
+        embed = get_embed('📝 | 정보 명령어')
+        embed.description = '\n'.join([
+            '`알티야 핑` : 봇 지연시간을 확인합니다.',
+            '`알티야 정보` : 봇 정보를 확인합니다.',
+            '`알티야 유저` : 가입자 수와 서버 수를 확인합니다.',
+            '`알티야 주사위` : 주사위를 굴립니다.',
+            '`알티야 업타임` : 봇이 켜져 있던 시간을 확인합니다.',
+            '`알티야 프로필 [@유저]` : 유저 프로필을 봅니다.',
+            '`알티야 프사 [@유저]` : 유저 프로필 사진을 봅니다.',
+            '`알티야 투표 <내용>` : 찬반 투표를 만듭니다.',
+            '`알티야 문의 <내용>` : 관리자에게 문의를 보냅니다.',
+        ])
         await ctx.send(embed=embed)
 
-    @_help.command(name='도박')
-    async def _help_2(self, ctx):
-        embed=get_embed("\📝 | **도박 명령어**","""**알티야 도박 (액수 / 올인)** : 도박을 시작합니다.
-**알티야 저금 (액수 / 올인)** : 현재 모은 돈을 은행에 저금합니다.
-**알티야 인출 (액수 / 올인)** : 저금된 돈을 꺼내옵니다.
-**알티야 내돈** : 현재 잔액을 표시합니다.
-**알티야 은행잔고** : 저금한 금액을 확인합니다.
-**알티야 돈내놔** : 알티봇이 돈을 줍니다.
-**알티야 돈줘 (@멘션) (액수)** : 멘션 한 사람에게 일정량의 돈을 줍니다.""")
+    @_help.command(name='경제', aliases=['도박', '돈'])
+    async def _help_money(self, ctx):
+        embed = get_embed('💰 | 경제 명령어')
+        embed.description = '\n'.join([
+            '`알티야 가입` : 경제 시스템에 가입합니다.',
+            '`알티야 탈퇴` : 모든 데이터를 삭제하고 탈퇴합니다.',
+            '`알티야 내돈 [@유저]` : 지갑 잔액을 확인합니다.',
+            '`알티야 은행잔고` : 은행 잔액을 확인합니다.',
+            '`알티야 돈내놔` : 30초마다 400원을 받습니다.',
+            '`알티야 송금 @유저 금액` : 수수료 차감 후 송금합니다.',
+            '`알티야 저금 금액` / `알티야 저금 전체` : 지갑에서 은행으로 옮깁니다.',
+            '`알티야 인출 금액` / `알티야 인출 전체` : 은행에서 지갑으로 옮깁니다.',
+            '`알티야 돈순위` / `알티야 돈순위 서버` : 자산 순위를 봅니다.',
+            '`알티야 도박 금액` / `알티야 도박 전체` : 도박을 합니다.',
+        ])
         await ctx.send(embed=embed)
 
-    @_help.command(name='미니게임')
-    async def _help_4(self, ctx):
-        embed=get_embed("\📝 | **미니게임 명령어**","""**알티야 숫자맞추기** : 숫자맞추기 게임을 합니다. 
-**알티야 가위바위보 (빠,묵,찌)** : 가위바위보를 합니다 이긴사람이 1000원을 갖습니다.
-**알티야 슬롯 (액수)** 슬롯게임을 합니다.
-**알티야 낚시** : 낚시를 합니다. (개발중인 명령어)""")
+    @_help.command(name='게임', aliases=['미니게임', '강화'])
+    async def _help_game(self, ctx):
+        embed = get_embed('🎮 | 게임 / 강화 명령어')
+        embed.description = '\n'.join([
+            '`알티야 숫자맞추기 [금액]` : 숫자 맞추기 게임을 합니다.',
+            '`알티야 슬롯 [금액]` : 슬롯 게임을 합니다.',
+            '`알티야 강화 <이름>` : 아이템을 강화합니다.',
+            '`알티야 강화 목록` : 내 강화 아이템 목록을 봅니다.',
+            '`알티야 강화 삭제 <이름>` : 강화 아이템을 삭제합니다.',
+            '`알티야 강화 판매 <이름>` : 60레벨 이상 아이템을 판매합니다.',
+            '`알티야 강화 순위 서버` / `알티야 강화 순위 전체` : 강화 랭킹을 봅니다.',
+            '`알티야 가위바위보` : 현재 비활성화되어 있습니다.',
+        ])
         await ctx.send(embed=embed)
+
+    @_help.command(name='관리자', aliases=['어드민'])
+    async def _help_admin(self, ctx):
+        embed = get_embed('🛠️ | 관리자 명령어')
+        embed.description = '\n'.join([
+            '`알티야 돈설정 <유저ID> <금액>`',
+            '`알티야 은행설정 <유저ID> <금액>`',
+            '`알티야 강화설정 <유저ID> <이름> <레벨>`',
+            '`알티야 강제가입 <유저ID>`',
+            '`알티야 유저등록확인 <유저ID>`',
+            '`알티야 어드민추가 <유저ID>`',
+            '`알티야 블랙추가 <유저ID>` / `알티야 블랙제거 <유저ID>`',
+            '`알티야 공지보내 <내용>`',
+        ])
+        await ctx.send(embed=embed)
+
 
 async def setup(client):
     await client.add_cog(_help(client))
