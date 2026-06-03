@@ -11,6 +11,9 @@ from utils.views import ask_confirm
 
 STAR_LEVEL_BASE = 100
 DESTROY_LEVEL = 90
+MIN_ITEM_NAME_LENGTH = 2
+MAX_ITEM_NAME_LENGTH = 15
+BLOCKED_STAR_EMOJIS = {'⭐', '🌟', '✨', '💫', '🌠', '✴️', '✳️', '❇️', '✡️'}
 
 
 def get_embed(title, description='', color=0xCCFFFF):
@@ -35,6 +38,15 @@ def item_label(name: str, level: int) -> str:
     if stars <= 0:
         return f'{name} (Lv. {level})'
     return f'{name} {star_icons(stars)} (Lv. {level}, {stars}성)'
+
+
+def validate_item_name(name: str):
+    stripped = name.strip()
+    if len(stripped) < MIN_ITEM_NAME_LENGTH or len(stripped) > MAX_ITEM_NAME_LENGTH:
+        return False, f'아이템 이름은 {MIN_ITEM_NAME_LENGTH}글자 이상 {MAX_ITEM_NAME_LENGTH}자 이내여야 합니다.'
+    if any(star in stripped for star in BLOCKED_STAR_EMOJIS):
+        return False, '아이템 이름에는 별 이모지를 사용할 수 없습니다.'
+    return True, stripped
 
 
 def star_rate(stars: int):
@@ -169,10 +181,13 @@ class reinforce(commands.Cog):
     @commands.group(name='강화', aliases=['강'], invoke_without_command=True)
     @commands.cooldown(1, 1, commands.BucketType.user)
     async def _reinforce(self, ctx, *, weapon):
-        user = ctx.author.id
-        if not weapon:
-            await ctx.send(embed=get_embed('🛠️ 강화 사용법', '알티야 강화 <이름> 형식으로 사용해주세요.', 0xFF0000))
+        is_valid_name, item_name_or_error = validate_item_name(weapon)
+        if not is_valid_name:
+            await ctx.send(embed=get_embed('🛠️ 강화 이름 오류', item_name_or_error, 0xFF0000))
             return
+
+        weapon = item_name_or_error
+        user = ctx.author.id
 
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
