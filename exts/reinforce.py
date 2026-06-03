@@ -164,6 +164,20 @@ class reinforce(commands.Cog):
         await cur.execute('UPDATE inventory SET amount = %s WHERE user_id = %s AND item_key = %s', (amount - 1, user_id, item_key))
         return True
 
+    async def ask_and_consume_item(self, ctx, cur, user_id, *, item_key, item_name, title, description):
+        amount = await self.item_amount(cur, user_id, item_key)
+        if amount <= 0:
+            return False
+
+        confirmed, _ = await ask_confirm(
+            ctx,
+            embed=get_embed(title, f'{description}\n\n보유 중인 {item_name}: {amount:,}개\n사용하시겠습니까?'),
+            timeout=30,
+        )
+        if confirmed is not True:
+            return False
+        return await self.consume_item(cur, user_id, item_key)
+
     async def consume_best_normal_booster(self, cur, user_id):
         if await self.consume_item(cur, user_id, 'normal_super_booster'):
             return 10, '고급강화부스터'
@@ -171,25 +185,28 @@ class reinforce(commands.Cog):
             return 5, '일반강화부스터'
         return 0, None
 
-    async def consume_normal_protection(self, cur, user_id):
-        if await self.consume_item(cur, user_id, 'perfect_protect'):
-            return '완전보호권'
-        if await self.consume_item(cur, user_id, 'normal_protect'):
+    async def ask_normal_protection(self, ctx, cur, user_id, weapon, level, amount):
+        description = f'{item_label(weapon, level)}\n실패로 {amount}레벨 하락할 예정입니다.'
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='normal_protect', item_name='일반강화보호권', title='🛡️ 하락 방지 사용', description=description):
             return '일반강화보호권'
-        return None
-
-    async def consume_star_fail_protection(self, cur, user_id):
-        if await self.consume_item(cur, user_id, 'perfect_protect'):
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='perfect_protect', item_name='완전보호권', title='🛡️ 하락 방지 사용', description=description):
             return '완전보호권'
-        if await self.consume_item(cur, user_id, 'star_drop_protect'):
-            return '스타하락방지권'
         return None
 
-    async def consume_star_destroy_protection(self, cur, user_id):
-        if await self.consume_item(cur, user_id, 'perfect_protect'):
-            return '완전보호권', 'hold'
-        if await self.consume_item(cur, user_id, 'star_destroy_protect'):
+    async def ask_star_fail_protection(self, ctx, cur, user_id, weapon, level, stars):
+        description = f'{item_label(weapon, level)}\n실패로 {stars}성 → {max(0, stars - 1)}성 하락할 예정입니다.'
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='star_drop_protect', item_name='스타하락방지권', title='🛡️ 스타 하락 방지 사용', description=description):
+            return '스타하락방지권'
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='perfect_protect', item_name='완전보호권', title='🛡️ 스타 하락 방지 사용', description=description):
+            return '완전보호권'
+        return None
+
+    async def ask_star_destroy_protection(self, ctx, cur, user_id, weapon, level, stars):
+        description = f'{item_label(weapon, level)}\n파괴가 발생했습니다. 사용하지 않으면 0성 90레벨로 내려갑니다.'
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='star_destroy_protect', item_name='스타파괴방지권', title='🛡️ 스타 파괴 방지 사용', description=description):
             return '스타파괴방지권', 'drop'
+        if await self.ask_and_consume_item(ctx, cur, user_id, item_key='perfect_protect', item_name='완전보호권', title='🛡️ 스타 파괴 방지 사용', description=description):
+            return '완전보호권', 'hold'
         return None, None
 
     @commands.group(name='강화', aliases=['강'], invoke_without_command=True)
@@ -242,7 +259,7 @@ class reinforce(commands.Cog):
                         await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, user, weapon))
                         await ctx.send(embed=get_embed('✨ 스타강화 성공', f'{item_label(weapon, new_level)}\n{stars}성 → {stars + 1}성'))
                     elif roll <= success + fail:
-                        protect = await self.consume_star_fail_protection(cur, user)
+                        protect = await self.ask_star_fail_protection(ctx, cur, user, weapon, level, stars)
                         new_level = level if protect else max(STAR_LEVEL_BASE, level - 1)
                         await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, user, weapon))
                         msg = f'{item_label(weapon, new_level)}\n{stars}성 → {star_count(new_level)}성'
@@ -250,7 +267,7 @@ class reinforce(commands.Cog):
                             msg += f'\n사용 아이템: {protect}'
                         await ctx.send(embed=get_embed('💥 스타강화 실패', msg, 0xFF0000))
                     else:
-                        protect, mode = await self.consume_star_destroy_protection(cur, user)
+                        protect, mode = await self.ask_star_destroy_protection(ctx, cur, user, weapon, level, stars)
                         if mode == 'hold':
                             new_level = level
                         elif mode == 'drop':
@@ -277,7 +294,7 @@ class reinforce(commands.Cog):
                 else:
                     amount = normal_loss(level)
                     new_level = max(normal_fail_floor(level), level - amount)
-                    protect = await self.consume_normal_protection(cur, user)
+                    protect = await self.ask_normal_protection(ctx, cur, user, weapon, level, amount)
                     if protect:
                         new_level = level
                     await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, user, weapon))
