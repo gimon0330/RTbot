@@ -42,6 +42,7 @@ class reg(commands.Cog):
         if e == '<a:yes:698461934198063104>':
             async with self.pool.acquire() as conn:
                 async with conn.cursor(aiomysql.DictCursor) as cur:
+                    await cur.execute('DELETE FROM reinforce WHERE id = %s', ctx.author.id)
                     await cur.execute('DELETE FROM userdata WHERE id = %s', ctx.author.id)
 
             await asyncio.gather(
@@ -83,8 +84,8 @@ class reg(commands.Cog):
             async with self.pool.acquire() as conn:
                 async with conn.cursor(aiomysql.DictCursor) as cur:
                     await cur.execute(
-                        'INSERT INTO userdata VALUES(%s, %s, 0, 0, 0)',
-                        (ctx.author.id, '5000'),
+                        'INSERT INTO userdata (id, money, bank, adminuser, blacklist) VALUES (%s, %s, %s, %s, %s)',
+                        (ctx.author.id, '5000', '0', 0, 0),
                     )
 
             await asyncio.gather(
