@@ -1,11 +1,17 @@
-import discord,json,asyncio,aiomysql,uuid,random
+import uuid
 from random import randint
-from discord.ext import commands 
-from utils import errors,checks
+
+import aiomysql
+import discord
+from discord.ext import commands
+
+from utils import checks
+from utils.views import ask_confirm
+
 
 def get_embed(title, description='', color=0xCCFFFF):
-    embed=discord.Embed(title=title,description=description,color=color)
-    return embed
+    return discord.Embed(title=title, description=description, color=color)
+
 
 class reinforce(commands.Cog):
     def __init__(self, client):
@@ -22,213 +28,168 @@ class reinforce(commands.Cog):
     async def _reinforce(self, ctx, *, weapon):
         user = ctx.author.id
         if not weapon:
-            await ctx.send("알티야 강화 (이름)의 형식으로 사용해주세용")
+            await ctx.send(embed=get_embed('강화 사용법', '알티야 강화 <이름> 형식으로 사용해주세요.', 0xFF0000))
             return
+
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s',(user,weapon)) == 0:
-                    await cur.execute('SELECT * FROM reinforce WHERE id = %s',user)
-                    fetch = await cur.fetchall()
-                    if len(fetch) >= 20:
-                        await ctx.send(embed=get_embed('<a:no:698461934613168199> | 강화는 최대 20개까지 가능합니다.',"<알티야 강화 삭제 (이름)> 또는 <알티야 강화 판매 (이름)>으로 강화 수를 줄여주세요", 0xFF0000))
+                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s', (user, weapon)) == 0:
+                    await cur.execute('SELECT * FROM reinforce WHERE id = %s', user)
+                    items = await cur.fetchall()
+                    if len(items) >= 20:
+                        await ctx.send(embed=get_embed('강화 개수 초과', '강화는 최대 20개까지 가능합니다.', 0xFF0000))
                         return
-                    else: 
-                        await cur.execute('INSERT INTO reinforce VALUES (%s,%s,%s,%s)',(uuid.uuid4().hex,weapon,user,0))
-                
-                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s',(user,weapon))
-                fetch = await cur.fetchone()
-                level=fetch["level"]
+                    await cur.execute('INSERT INTO reinforce VALUES (%s, %s, %s, %s)', (uuid.uuid4().hex, weapon, user, 0))
 
-                #############################################
-                
+                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s', (user, weapon))
+                row = await cur.fetchone()
+                level = int(row['level'])
+
                 if level >= 100:
-                    msg = await ctx.send(embed=get_embed(":hammer: | 특수 강화","100렙을 넘으셔서 특수강화 도전을 하실수 있습니다.\n성공 : 50% (5~20 레벨 랜덤 오름)\n실패 : 50% (실패시 80레벨)\n도전 하시겠습니까?"))
-                    emjs=['<a:yes:698461934198063104>','<a:no:698461934613168199>']
-                    await msg.add_reaction(emjs[0])
-                    await msg.add_reaction(emjs[1])
-                    def check(reaction, user):
-                        return user == ctx.author and msg.id == reaction.message.id and str(reaction.emoji) in emjs
-                    try:
-                        reaction, user = await self.client.wait_for('reaction_add', check=check, timeout=60)
-                    except asyncio.TimeoutError:
-                        await asyncio.gather(msg.delete(),ctx.send(embed=get_embed('⏰ | 시간이 초과되었습니다!',"", 0xFF0000)))
+                    confirmed, _ = await ask_confirm(
+                        ctx,
+                        embed=get_embed(
+                            '특수 강화',
+                            '100레벨 이상 아이템입니다.\n성공: 50% 확률로 5~20레벨 상승\n실패: 80레벨로 하락\n도전하시겠습니까?',
+                        ),
+                        timeout=30,
+                    )
+                    if confirmed is None:
+                        await ctx.send(embed=get_embed('시간 초과', '특수 강화가 취소되었습니다.', 0xFF0000))
                         return
+                    if confirmed is False:
+                        await ctx.send(embed=get_embed('취소됨', '특수 강화가 취소되었습니다.', 0xFF0000))
+                        return
+
+                    if randint(0, 1) == 1:
+                        gain = randint(5, 20)
+                        new_level = level + gain
+                        await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
+                        await ctx.send(embed=get_embed('특수 강화 성공', f'{weapon}이 {gain}레벨 성장했습니다.\n현재 레벨: {new_level}'))
                     else:
-                        e = str(reaction.emoji)
-                        if e == '<a:yes:698461934198063104>':
-                            rand = randint(0,1)
-                            if rand == 1:
-                                n = randint(5,20)
-                                await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s',(level+n, ctx.author.id, weapon))
-                                await ctx.send(embed=get_embed(f"<a:yes:698461934198063104> | {weapon} (이)가 **{n}레벨** 성장했습니다.",f"현재 레벨 : **{level+n}**"))
-                                return
-                            else:
-                                await cur.execute('UPDATE reinforce SET level = 80 WHERE id = %s and name = %s',(ctx.author.id, weapon))
-                                await ctx.send(embed=get_embed(f"<a:no:698461934613168199> | {weapon} (이)가 파괴되었습니다.","",0xff0000))
-                                return
-                        elif e == '<a:no:698461934613168199>':
-                            await ctx.send(embed=get_embed("<a:no:698461934613168199> | 취소 되었습니다.","",0xff0000))
-                            return
+                        await cur.execute('UPDATE reinforce SET level = 80 WHERE id = %s and name = %s', (ctx.author.id, weapon))
+                        await ctx.send(embed=get_embed('특수 강화 실패', f'{weapon}이 80레벨로 하락했습니다.', 0xFF0000))
+                    return
 
-                #############################################
-
+                rand = randint(0, 100) - level
+                if rand > 0:
+                    gain = randint(2, 10)
+                    new_level = level + gain
+                    await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
+                    await ctx.send(embed=get_embed('강화 성공', f'{weapon}이 {gain}레벨 성장했습니다.\n현재 레벨: {new_level}'))
                 else:
-                    rand = randint(0,100) - level
-                    if rand > 0:
-                        n = randint(2,10)
-                        await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s',(level+n, ctx.author.id, weapon))
-                        await ctx.send(f"**성공!** {weapon} (이)가 **{100-level}%**의 확률로 **{n}레벨** 성장했습니다\n현재 레벨 : **{level+n}**")
-                    else: 
-                        n=randint(1,5)
-                        await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s',(level-n, ctx.author.id, weapon))
-                        await ctx.send(f"**실패..** {weapon}이가 **{level}%**의 확률로 **{n}레벨** 하강ㅠㅠ\n현재 레벨 : **{level-n}**")
+                    loss = randint(1, 5)
+                    new_level = level - loss
+                    await cur.execute('UPDATE reinforce SET level = %s WHERE id = %s and name = %s', (new_level, ctx.author.id, weapon))
+                    await ctx.send(embed=get_embed('강화 실패', f'{weapon}이 {loss}레벨 하락했습니다.\n현재 레벨: {new_level}', 0xFF0000))
 
-    @_reinforce.command(name='목록', aliases=['물품','리스트'])
+    @_reinforce.command(name='목록', aliases=['물품', '리스트'])
     async def _rf_list(self, ctx):
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute('SELECT * FROM reinforce WHERE id = %s',ctx.author.id)
-                fetch = await cur.fetchall()
-        lis = []
-        for s in fetch:
-            lis.append(f"**Lv {s['level']}**  {s['name']}")
-        await ctx.send(embed=get_embed(f":wrench: **{ctx.author} 님의 강화 목록**","\n".join(lis)))
+                await cur.execute('SELECT * FROM reinforce WHERE id = %s ORDER BY level DESC', ctx.author.id)
+                rows = await cur.fetchall()
+        if not rows:
+            await ctx.send(embed=get_embed('강화 목록', '아직 강화 아이템이 없습니다.'))
+            return
+        text = '\n'.join(f"Lv {row['level']}  {row['name']}" for row in rows)
+        await ctx.send(embed=get_embed(f'{ctx.author} 님의 강화 목록', text))
 
     @_reinforce.command(name='삭제')
     async def _rf_erase(self, ctx, *, arg):
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s',(ctx.author.id,arg)) == 0:
-                    await ctx.send(embed=get_embed("<a:no:698461934613168199> | 찾을수 없는 물품입니다.","",0xff0000))
+                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg)) == 0:
+                    await ctx.send(embed=get_embed('찾을 수 없는 물품입니다.', '', 0xFF0000))
                     return
 
-                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s',(ctx.author.id,arg))
-                fetch = await cur.fetchone()
-                level=fetch["level"]
+                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
+                row = await cur.fetchone()
+                level = int(row['level'])
 
-                msg  = await ctx.send(embed=get_embed("📄 | 강화 삭제",f"**Lv.{level} {arg}**\n\n정말 삭제 하시겠습니까?"))
-                emjs=['<a:yes:698461934198063104>','<a:no:698461934613168199>']
-                await msg.add_reaction(emjs[0])
-                await msg.add_reaction(emjs[1])
-                def check(reaction, user):
-                    return user == ctx.author and msg.id == reaction.message.id and str(reaction.emoji) in emjs
-                try:
-                    reaction, user = await self.client.wait_for('reaction_add', check=check, timeout=60)
-                except asyncio.TimeoutError:
-                    await asyncio.gather(
-                        msg.delete(),
-                        ctx.send(embed=get_embed('⏰ | 시간이 초과되었습니다!',"", 0xFF0000))
-                        )
+                confirmed, _ = await ask_confirm(
+                    ctx,
+                    embed=get_embed('강화 삭제', f'Lv.{level} {arg}\n정말 삭제하시겠습니까?'),
+                    timeout=30,
+                )
+                if confirmed is None:
+                    await ctx.send(embed=get_embed('시간 초과', '삭제가 취소되었습니다.', 0xFF0000))
                     return
-                else:
-                    e = str(reaction.emoji)
-                    if e == '<a:yes:698461934198063104>':
-                        await cur.execute('DELETE from reinforce WHERE id = %s and name = %s',(ctx.author.id,arg))
-                        await ctx.send(embed=get_embed("<a:yes:698461934198063104> | 삭제 완료!"))
-                        return
-                    elif e == '<a:no:698461934613168199>':
-                        await ctx.send(embed=get_embed("<a:no:698461934613168199> | 취소 되었습니다.","",0xff0000))
-                        return
+                if confirmed is False:
+                    await ctx.send(embed=get_embed('취소됨', '삭제가 취소되었습니다.', 0xFF0000))
+                    return
+
+                await cur.execute('DELETE FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
+        await ctx.send(embed=get_embed('삭제 완료'))
 
     @_reinforce.command(name='판매')
     async def _rf_sell(self, ctx, *, arg):
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s',(ctx.author.id, arg)) == 0:
-                    await ctx.send(embed=get_embed("<a:no:698461934613168199> | 찾을 수 없는 물품입니다.","",0xff0000))
+                if await cur.execute('SELECT * FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg)) == 0:
+                    await ctx.send(embed=get_embed('찾을 수 없는 물품입니다.', '', 0xFF0000))
                     return
 
-                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s',(ctx.author.id, arg))
-                fetch = await cur.fetchone()
-                level=fetch["level"]
-
+                await cur.execute('SELECT level FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
+                row = await cur.fetchone()
+                level = int(row['level'])
                 if level < 60:
-                    await ctx.send(embed=get_embed("<a:no:698461934613168199> | 60레벨 이상의 물품만 판매하실수 있습니다.","<알티야 강화 삭제> 명령어로 삭제가 가능합니다.",0xff0000))
+                    await ctx.send(embed=get_embed('판매 불가', '60레벨 이상의 물품만 판매할 수 있습니다.', 0xFF0000))
                     return
 
-                n = 2 ** (level - 45)
-
-                msg  = await ctx.send(embed=get_embed("📄 | 강화 판매",f"**Lv.{level} {arg}**\n\n의 가치는 {n}입니다.\n정말 판매 하시겠습니까?"))
-                emjs=['<a:yes:698461934198063104>','<a:no:698461934613168199>']
-                for a in emjs: await msg.add_reaction(a)
-                def check(reaction, user):
-                    return user == ctx.author and msg.id == reaction.message.id and str(reaction.emoji) in emjs
-                try:
-                    reaction, user = await self.client.wait_for('reaction_add', check=check, timeout=60)
-                except asyncio.TimeoutError:
-                    await asyncio.gather(
-                        msg.delete(),
-                        ctx.send(embed=get_embed('⏰ | 시간이 초과되었습니다!',"", 0xFF0000))
-                        )
+                price = 2 ** (level - 45)
+                confirmed, _ = await ask_confirm(
+                    ctx,
+                    embed=get_embed('강화 판매', f'Lv.{level} {arg}\n판매가: {price:,}원\n정말 판매하시겠습니까?'),
+                    timeout=30,
+                )
+                if confirmed is None:
+                    await ctx.send(embed=get_embed('시간 초과', '판매가 취소되었습니다.', 0xFF0000))
                     return
-                else:
-                    e = str(reaction.emoji)
-                    if e == '<a:yes:698461934198063104>':
-                        await cur.execute('DELETE from reinforce WHERE id = %s and name = %s',(ctx.author.id,arg))
+                if confirmed is False:
+                    await ctx.send(embed=get_embed('취소됨', '판매가 취소되었습니다.', 0xFF0000))
+                    return
 
-                        await cur.execute('SELECT money FROM userdata WHERE id = %s', ctx.author.id)
-                        fetch = await cur.fetchone()
-                        money = int(fetch['money'])
-                        await cur.execute('UPDATE userdata set money=%s WHERE id = %s', (str(money+n),ctx.author.id))
-
-                        await ctx.send(embed=get_embed("<a:yes:698461934198063104> | 판매 완료!",f'{n}원이 지급되었습니다.'))
-                        return
-                    elif e == '<a:no:698461934613168199>':
-                        await ctx.send(embed=get_embed("<a:no:698461934613168199> | 취소 되었습니다.","",0xff0000))
-                        return
+                await cur.execute('DELETE FROM reinforce WHERE id = %s and name = %s', (ctx.author.id, arg))
+                await cur.execute('SELECT money FROM userdata WHERE id = %s', ctx.author.id)
+                money_row = await cur.fetchone()
+                money = int(money_row['money'])
+                await cur.execute('UPDATE userdata SET money = %s WHERE id = %s', (str(money + price), ctx.author.id))
+        await ctx.send(embed=get_embed('판매 완료', f'{price:,}원이 지급되었습니다.'))
 
     @_reinforce.group(name='순위', invoke_without_command=True)
     async def _rf_rank(self, ctx):
-        await ctx.send(embed=get_embed("<a:no:698461934613168199> | 올바르지 않은 명령어입니다!","알티야 강화 순위 서버/전체로 사용해주세요",0xff0000))
+        await ctx.send(embed=get_embed('올바르지 않은 명령어입니다.', '알티야 강화 순위 서버/전체로 사용해주세요.', 0xFF0000))
 
     @_rf_rank.command(name='서버')
     async def _rf_list_server(self, ctx):
-        lis = []
+        ranking = []
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute('SELECT * FROM reinforce')
-                fetch = await cur.fetchall()
-                for r in fetch:
-                    try: user = ctx.guild.get_member(int(r["id"])).name
-                    except: pass
-                    else: lis.append([user, r["name"], r["level"]])
-        lis.sort(key=lambda x: x[2], reverse=True)
-        alis = []
-        a=0
-        for r in lis:
-            if a ==0: medal = '<:LeaderboardTrophy01:716106586333904986>'
-            elif a==1: medal = '<:silverthropy:736215959823712306>'
-            elif a==2: medal = '<:bronzethropy:736215949614645269>'
-            else: medal = '🏅'
-            alis.append(f"{medal} | **{r[0]}**\n> **Lv{r[2]}** {r[1]}\n\n")
-            a+=1
-            if a>=6: break
-        await ctx.send(embed=get_embed(":bar_chart: | 서버 강화 순위","".join(alis)))
+                await cur.execute('SELECT * FROM reinforce ORDER BY level DESC')
+                rows = await cur.fetchall()
+        for row in rows:
+            member = ctx.guild.get_member(int(row['id']))
+            if member is not None:
+                ranking.append([member.name, row['name'], int(row['level'])])
+            if len(ranking) >= 6:
+                break
+        text = '\n\n'.join(f'{idx + 1}위 | {name}\nLv{level} {item}' for idx, (name, item, level) in enumerate(ranking))
+        await ctx.send(embed=get_embed('서버 강화 순위', text or '표시할 강화 기록이 없습니다.'))
 
     @_rf_rank.command(name='전체')
     async def _rf_list_all(self, ctx):
-        lis = []
+        ranking = []
         async with self.pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute('SELECT * FROM reinforce')
-                fetch = await cur.fetchall()
-                for r in fetch:
-                    try: user = self.client.get_user(int(r["id"])).name
-                    except: user = int(r["id"])
-                    else:
-                        lis.append([user, r["name"], r["level"]])
-        lis.sort(key=lambda x: x[2], reverse=True)
-        alis = []
-        a=0
-        for r in lis:
-            if a ==0: medal = '<:LeaderboardTrophy01:716106586333904986>'
-            elif a==1: medal = '<:silverthropy:736215959823712306>'
-            elif a==2: medal = '<:bronzethropy:736215949614645269>'
-            else: medal = '🏅'
-            alis.append(f"{medal} | **{r[0]}**\n**Lv{r[2]}** {r[1]}\n\n")
-            a+=1
-            if a>=6: break
-        await ctx.send(embed=get_embed(":bar_chart: | 서버 강화 순위","".join(alis)))
+                await cur.execute('SELECT * FROM reinforce ORDER BY level DESC LIMIT 6')
+                rows = await cur.fetchall()
+        for row in rows:
+            user = self.client.get_user(int(row['id']))
+            ranking.append([user.name if user else str(row['id']), row['name'], int(row['level'])])
+        text = '\n\n'.join(f'{idx + 1}위 | {name}\nLv{level} {item}' for idx, (name, item, level) in enumerate(ranking))
+        await ctx.send(embed=get_embed('전체 강화 순위', text or '표시할 강화 기록이 없습니다.'))
+
 
 async def setup(client):
     await client.add_cog(reinforce(client))
