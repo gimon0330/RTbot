@@ -73,6 +73,20 @@ def roll_starforce(stars: int):
     return 'destroy', success, fail, destroy
 
 
+def reinforce_sell_price(level: int) -> int:
+    if level < 60:
+        return 0
+    if level < 80:
+        return 80_000 + (level - 60) * 4_000
+    if level < 90:
+        return 300_000 + (level - 80) * 70_000
+    if level <= 100:
+        return 1_000_000 + (level - 90) * 100_000
+    if level < 105:
+        return 2_000_000 + (level - 100) * 2_000_000
+    return 20_000_000 * (2 ** (level - 105))
+
+
 def normal_success_rate(level: int) -> int:
     base = max(8, 100 - level)
 
@@ -308,7 +322,7 @@ class reinforce(commands.Cog):
                     await ctx.send(embed=get_embed('💰 판매 불가', '60레벨 이상의 물품만 판매할 수 있습니다.', 0xFF0000))
                     return
 
-                price = 2 ** (level - 45)
+                price = reinforce_sell_price(level)
                 label = item_label(arg, level)
                 confirmed, _ = await ask_confirm(
                     ctx,
