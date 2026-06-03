@@ -62,7 +62,12 @@ def roll_starforce(stars: int):
 
 
 def normal_success_rate(level: int) -> int:
-    return max(8, 100 - level)
+    base = max(8, 100 - level)
+
+    if level >= 70:
+        base += 2
+
+    return min(base, 100)
 
 
 def normal_gain(level: int) -> int:
