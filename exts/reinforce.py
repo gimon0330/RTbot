@@ -96,13 +96,13 @@ def normal_gain(level: int) -> int:
     if level < 90:
         return random.choices(
             values,
-            weights=[2, 3, 4, 4, 3, 2, 1, 0.5, 0.5, 0.5],
+            weights=[4, 6, 10, 10, 7, 4, 3, 2, 1, 1],
             k=1,
         )[0]
 
     return random.choices(
         values,
-        weights=[5, 5, 4, 3, 2, 1, 0.5, 0.5, 0.3, 0.2],
+        weights=[5, 8, 10, 7, 5, 4, 3, 2, 1, 1],
         k=1,
     )[0]
 
