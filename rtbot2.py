@@ -7,6 +7,8 @@ import aiomysql
 import discord
 from discord.ext import commands
 
+from utils.user_state import active_interaction_reason, has_active_interaction
+
 
 CONFIG_PATH = Path(os.getenv("RTBOT_CONFIG", "./config/config.json"))
 DEFAULT_EXTENSIONS_DIR = Path("./exts")
@@ -80,6 +82,26 @@ def build_intents():
     return intents
 
 
+async def active_interaction_check(ctx):
+    allowed = {
+        "도움",
+        "도움 정보",
+        "도움 경제",
+        "도움 게임",
+        "도움 관리자",
+    }
+
+    if ctx.command and ctx.command.qualified_name in allowed:
+        return True
+
+    if has_active_interaction(ctx.bot, ctx.author.id):
+        reason = active_interaction_reason(ctx.bot, ctx.author.id) or "진행 중인 작업"
+        await ctx.send(f"현재 `{reason}` 응답을 기다리는 중입니다. 먼저 진행 중인 작업을 완료해주세요.")
+        return False
+
+    return True
+
+
 async def main():
     pool = await connect_db()
 
@@ -88,6 +110,7 @@ async def main():
         intents=build_intents(),
     )
     client.pool = pool
+    client.add_check(active_interaction_check)
 
     for ext_path in sorted(DEFAULT_EXTENSIONS_DIR.glob("*.py")):
         if ext_path.name.startswith("_"):
