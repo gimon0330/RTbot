@@ -5,17 +5,21 @@ SHOP_ITEMS = {
         'price': 300_000,
         'description': '100레벨 미만 일반 강화 실패 시 레벨 하락을 1회 방지합니다.',
     },
-    'normal_booster': {
-        'name': '일반강화부스터',
-        'aliases': ['일반부스터', '강화부스터'],
-        'price': 150_000,
-        'description': '100레벨 미만 일반 강화 1회 성공률을 5% 올립니다.',
+    'item_rate_boost_5': {
+        'name': '아이템확률증폭권5',
+        'aliases': ['확률증폭권5', '5퍼증폭권', '5%증폭권', '아이템5퍼증폭'],
+        'price': 3_000_000,
+        'description': '구매 직후 선택한 강화 아이템의 일반 강화 성공률을 영구적으로 5% 올립니다.',
+        'apply_on_purchase': True,
+        'rate_bonus': 5,
     },
-    'normal_super_booster': {
-        'name': '고급강화부스터',
-        'aliases': ['고급부스터'],
-        'price': 450_000,
-        'description': '100레벨 미만 일반 강화 1회 성공률을 10% 올립니다.',
+    'item_rate_boost_10': {
+        'name': '아이템확률증폭권10',
+        'aliases': ['확률증폭권10', '10퍼증폭권', '10%증폭권', '아이템10퍼증폭'],
+        'price': 8_000_000,
+        'description': '구매 직후 선택한 강화 아이템의 일반 강화 성공률을 영구적으로 10% 올립니다.',
+        'apply_on_purchase': True,
+        'rate_bonus': 10,
     },
     'star_drop_protect': {
         'name': '스타하락방지권',
