@@ -30,8 +30,11 @@ def star_count(level: int) -> int:
 def star_icons(stars: int) -> str:
     if stars <= 0:
         return ''
-    big_stars, small_stars = divmod(stars, 5)
-    return '🌟' * big_stars + '⭐' * small_stars
+
+    galaxy_stars, remainder = divmod(stars, 25)
+    big_stars, small_stars = divmod(remainder, 5)
+
+    return '🌌' * galaxy_stars + '🌟' * big_stars + '⭐' * small_stars
 
 
 def item_label(name: str, level: int) -> str:
@@ -51,6 +54,15 @@ def validate_item_name(name: str):
 
 
 def star_rate(stars: int):
+    if stars >= 30:
+        return 1, 0, 99
+    if stars >= 25:
+        return 3, 22, 75
+    if stars >= 20:
+        return 5, 35, 60
+    if stars >= 15:
+        return 8, 42, 50
+
     rates = {
         0: (90, 10, 0),
         1: (80, 20, 0),
