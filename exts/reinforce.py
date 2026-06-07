@@ -95,14 +95,18 @@ def normal_success_rate(level: int) -> int:
 
 def normal_gain(level: int) -> int:
     values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    weights = []
 
     if level < 30:
-        return random.choices(values, weights=[1, 1, 2, 3, 5, 8, 12, 20, 24, 24], k=1)[0]
-    if level < 70:
-        return random.choices(values, weights=[1, 2, 8, 14, 18, 18, 16, 13, 6, 4], k=1)[0]
-    if level < 90:
-        return random.choices(values, weights=[4, 6, 10, 10, 7, 4, 3, 2, 1, 1], k=1)[0]
-    return random.choices(values, weights=[5, 8, 10, 7, 5, 4, 3, 2, 1, 1], k=1)[0]
+        weights=[1, 1, 2, 3, 5, 8, 12, 20, 24, 24]
+    elif level < 70:
+        weights=[1, 2, 8, 14, 18, 18, 16, 13, 6, 4]
+    elif level < 90:
+        weights=[4, 6, 10, 15, 10, 8, 6, 4, 2, 1]
+    else:
+        weights = [4, 6, 10, 10, 10, 6, 6, 2, 2, 1]
+        
+    return random.choices(values, weights=weights, k=1)[0]
 
 
 def normal_loss(level: int) -> int:
