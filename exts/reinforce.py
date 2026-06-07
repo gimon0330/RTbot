@@ -79,13 +79,13 @@ def reinforce_sell_price(level: int) -> int:
 
 
 def normal_success_rate(level: int) -> int:
-    base = max(8, 100 - level)
+    base = max(11, 100 - level)
 
     if level >= 60:
-        base += 2
+        base += 4
 
     if level >= 70:
-        base += 2
+        base += 3
 
     if level >= 80:
         base += 2
