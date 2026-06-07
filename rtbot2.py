@@ -7,6 +7,7 @@ import aiomysql
 import discord
 from discord.ext import commands
 
+from utils import errors
 from utils.user_state import active_interaction_reason, has_active_interaction
 
 
@@ -96,8 +97,7 @@ async def active_interaction_check(ctx):
 
     if has_active_interaction(ctx.bot, ctx.author.id):
         reason = active_interaction_reason(ctx.bot, ctx.author.id) or "진행 중인 작업"
-        await ctx.send(f"현재 `{reason}` 응답을 기다리는 중입니다. 먼저 진행 중인 작업을 완료해주세요.")
-        return False
+        raise errors.ActiveInteraction(reason)
 
     return True
 
