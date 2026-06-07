@@ -16,7 +16,4 @@ def get_embed(title, description='', color=0xCCFFFF):
 
 
 class minigame(commands.Cog):
-    def __init__(self, client):
-        self.client = client
-        self.pool = self.client.pool
-       
+    def
