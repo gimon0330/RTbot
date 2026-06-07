@@ -77,6 +77,14 @@ class events(commands.Cog):
         if commands.errors.MissingRequiredArgument in allerrs:
             return
 
+        elif isinstance(error, errors.ActiveInteraction):
+            await ctx.send(embed=get_embed(
+                "⏳ 진행 중인 작업이 있습니다",
+                f"`{error.reason}` 응답을 먼저 완료해주세요.",
+                0xFF0000,
+            ))
+            return
+
         elif isinstance(error, errors.playinggame):
             await ctx.send(embed=get_embed("<a:no:698461934613168199> | 이미 다른 게임이 진행중입니다.", "", 0xff0000))
             return
