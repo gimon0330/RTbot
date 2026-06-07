@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from utils import checks
 from utils.shop_items import SHOP_ITEMS, format_money, get_item, resolve_item_key
+from utils.user_state import user_interaction
 from utils.views import ask_confirm
 
 
@@ -97,33 +98,67 @@ class Shop(commands.Cog):
         )
         return new_bonus
 
+    def is_command_like_message(self, message):
+        content = message.content.strip()
+
+        if not content:
+            return False
+
+        prefixes = ['알티야 ', '알티야', '!', '?', '/']
+
+        if any(content.startswith(prefix) for prefix in prefixes):
+            return True
+
+        if self.client.user is not None and self.client.user.mentioned_in(message):
+            return True
+
+        return False
+
     async def ask_target_item_name(self, ctx, item, total_bonus, total_price):
-        await ctx.send(
-            embed=get_embed(
-                '🎯 적용할 강화 아이템 입력',
-                (
-                    f"{item['name']} 구매가 완료되었습니다.\n"
-                    f"적용할 강화 아이템 이름을 30초 안에 입력해주세요.\n\n"
-                    f"적용 효과: 일반 강화 성공률 영구 +{total_bonus}%\n"
-                    f"취소하거나 시간 초과되면 {format_money(total_price)}이 환불됩니다."
-                ),
+        async with user_interaction(ctx.bot, ctx.author.id, '강화 아이템 이름 입력 대기') as acquired:
+            if not acquired:
+                await ctx.send(
+                    embed=get_embed(
+                        '진행 중인 작업이 있습니다',
+                        '이미 다른 작업을 진행 중입니다. 먼저 진행 중인 버튼/입력을 완료해주세요.',
+                        0xFF0000,
+                    )
+                )
+                return None, 'busy'
+
+            await ctx.send(
+                embed=get_embed(
+                    '🎯 적용할 강화 아이템 입력',
+                    (
+                        f"{item['name']} 구매가 완료되었습니다.\n"
+                        f"적용할 강화 아이템 이름을 30초 안에 입력해주세요.\n\n"
+                        f"적용 효과: 일반 강화 성공률 영구 +{total_bonus}%\n"
+                        f"취소하거나 시간 초과되면 {format_money(total_price)}이 환불됩니다.\n\n"
+                        f"`취소`, `x`, `0`을 입력하면 구매가 취소되고 환불됩니다."
+                    ),
+                )
             )
-        )
 
-        def check(message):
-            return message.author == ctx.author and message.channel == ctx.channel
+            def check(message):
+                if message.author != ctx.author or message.channel != ctx.channel:
+                    return False
 
-        try:
-            message = await self.client.wait_for('message', check=check, timeout=30)
-        except asyncio.TimeoutError:
-            return None, 'timeout'
+                if self.is_command_like_message(message):
+                    return False
 
-        target_name = message.content.strip()
+                return True
 
-        if target_name in {'취소', 'cancel', 'Cancel', 'x', 'X', '0'}:
-            return None, 'cancel'
+            try:
+                message = await self.client.wait_for('message', check=check, timeout=30)
+            except asyncio.TimeoutError:
+                return None, 'timeout'
 
-        return target_name, None
+            target_name = message.content.strip()
+
+            if target_name in {'취소', 'cancel', 'Cancel', 'x', 'X', '0'}:
+                return None, 'cancel'
+
+            return target_name, None
 
     @commands.command(name='상점', aliases=['샵'])
     async def shop(self, ctx):
@@ -172,6 +207,7 @@ class Shop(commands.Cog):
                 f"{item['name']} {amount:,}개\n총 가격: {format_money(total_price)}",
             ),
             timeout=30,
+            reason='상점 구매 확인 대기',
         )
 
         if not confirmed:
@@ -214,7 +250,14 @@ class Shop(commands.Cog):
 
                     if target_name is None:
                         await self.refund_money(cur, ctx.author.id, total_price)
-                        reason_text = '시간이 초과되었습니다.' if fail_reason == 'timeout' else '구매가 취소되었습니다.'
+
+                        if fail_reason == 'timeout':
+                            reason_text = '시간이 초과되었습니다.'
+                        elif fail_reason == 'busy':
+                            reason_text = '이미 다른 작업이 진행 중입니다.'
+                        else:
+                            reason_text = '구매가 취소되었습니다.'
+
                         await ctx.send(
                             embed=get_embed(
                                 '💸 구매 환불',
