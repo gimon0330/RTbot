@@ -221,82 +221,219 @@ class minigame(commands.Cog):
             if n > money:
                 raise errors.NoMoney
 
-            embed = get_embed('숫자맞추기 난이도', '실패 시 건 돈은 사라집니다.')
-            embed.add_field(name='😀 쉬움', value='1~10, 보상 1~2배')
-            embed.add_field(name='😠 보통', value='1~20, 보상 2~4배')
-            embed.add_field(name='🤬 어려움', value='1~30, 보상 3~6배')
-            embed.set_footer(text='반응으로 난이도를 골라주세요. ❌는 취소입니다.')
-            msg = await ctx.send(embed=embed)
+            difficulties = {
+                'easy': {
+                    'name': '쉬움',
+                    'emoji': '😀',
+                    'max_number': 20,
+                    'chance': 5,
+                    'reward_rate': 1.5,
+                    'color': 0x66FF99,
+                },
+                'normal': {
+                    'name': '보통',
+                    'emoji': '😠',
+                    'max_number': 50,
+                    'chance': 6,
+                    'reward_rate': 2.5,
+                    'color': 0xFFCC66,
+                },
+                'hard': {
+                    'name': '어려움',
+                    'emoji': '🤬',
+                    'max_number': 100,
+                    'chance': 7,
+                    'reward_rate': 4,
+                    'color': 0xFF6666,
+                },
+            }
 
-            choices = ['😀', '😠', '🤬', '❌']
-            for emoji in choices:
-                await msg.add_reaction(emoji)
+            cog = self
 
-            def reaction_check(reaction, user):
-                return user == ctx.author and msg.id == reaction.message.id and str(reaction.emoji) in choices
+            class DifficultyView(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=30)
+                    self.selected = None
+                    self.message = None
 
-            try:
-                reaction, user = await self.client.wait_for('reaction_add', check=reaction_check, timeout=60)
-            except asyncio.TimeoutError:
-                await ctx.send(embed=get_embed('시간 초과', '', 0xFF0000))
+                async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                    if interaction.user.id != ctx.author.id:
+                        await interaction.response.send_message('이 게임은 명령어를 사용한 사람만 선택할 수 있습니다.', ephemeral=True)
+                        return False
+                    return True
+
+                def disable_all_buttons(self):
+                    for item in self.children:
+                        item.disabled = True
+
+                async def select_difficulty(self, interaction: discord.Interaction, key: str):
+                    self.selected = key
+                    self.disable_all_buttons()
+
+                    setting = difficulties[key]
+                    await interaction.response.edit_message(
+                        embed=get_embed(
+                            f'{setting["emoji"]} {setting["name"]}',
+                            f'1~{setting["max_number"]} | {setting["chance"]}번 | {setting["reward_rate"]}배',
+                            setting['color']
+                        ),
+                        view=self
+                    )
+                    self.stop()
+
+                @discord.ui.button(label='쉬움', emoji='😀', style=discord.ButtonStyle.success)
+                async def easy(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.select_difficulty(interaction, 'easy')
+
+                @discord.ui.button(label='보통', emoji='😠', style=discord.ButtonStyle.primary)
+                async def normal(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.select_difficulty(interaction, 'normal')
+
+                @discord.ui.button(label='어려움', emoji='🤬', style=discord.ButtonStyle.danger)
+                async def hard(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.select_difficulty(interaction, 'hard')
+
+                @discord.ui.button(label='취소', emoji='❌', style=discord.ButtonStyle.secondary)
+                async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    self.selected = 'cancel'
+                    self.disable_all_buttons()
+                    await interaction.response.edit_message(
+                        embed=get_embed('취소되었습니다.', '', 0xFF0000),
+                        view=self
+                    )
+                    self.stop()
+
+            view = DifficultyView()
+            embed = get_embed(
+                '업다운 선택',
+                f'베팅: {n:,}원\n\n'
+                '😀 쉬움 1~20 / 5번 / 1.5배\n'
+                '😠 보통 1~50 / 6번 / 2.5배\n'
+                '🤬 어려움 1~100 / 7번 / 4배'
+            )
+
+            msg = await ctx.send(embed=embed, view=view)
+            view.message = msg
+
+            timed_out = await view.wait()
+
+            if timed_out or view.selected is None:
+                view.disable_all_buttons()
+                await msg.edit(embed=get_embed('시간 초과', '게임이 취소되었습니다.', 0xFF0000), view=view)
                 return
 
-            emoji = str(reaction.emoji)
-            if emoji == '😀':
-                number = randint(1, 10)
-                level = 1
-            elif emoji == '😠':
-                number = randint(1, 20)
-                level = 2
-            elif emoji == '🤬':
-                number = randint(1, 30)
-                level = 3
-            else:
-                await ctx.send(embed=get_embed('취소되었습니다.', '', 0xFF0000))
+            if view.selected == 'cancel':
                 return
 
-            await ctx.send(embed=get_embed('숫자를 입력해주세요.'))
+            setting = difficulties[view.selected]
+            max_number = setting['max_number']
+            chance = setting['chance']
+            reward_rate = setting['reward_rate']
+            answer = randint(1, max_number)
+
+            await ctx.send(
+                embed=get_embed(
+                    f'업다운 시작',
+                    f'1~{max_number} | 기회 {chance}번\n'
+                    '숫자를 입력하세요.',
+                    setting['color']
+                )
+            )
+
+            used = 0
+            last_guess = None
 
             def number_check(message):
                 if message.author != ctx.author or message.channel != ctx.channel:
                     return False
-                try:
-                    int(message.content)
+
+                content = message.content.strip()
+
+                if content in ['0', 'x', 'X', '취소']:
                     return True
+
+                try:
+                    guess = int(content)
                 except ValueError:
                     return False
 
-            try:
-                answer = await self.client.wait_for('message', check=number_check, timeout=30)
-            except asyncio.TimeoutError:
-                await ctx.send(embed=get_embed('시간 초과', '', 0xFF0000))
-                return
+                return 1 <= guess <= max_number
 
-            diff = abs(int(answer.content) - number)
-            async with self.pool.acquire() as conn:
+            while used < chance:
+                try:
+                    guess_msg = await self.client.wait_for('message', check=number_check, timeout=30)
+                except asyncio.TimeoutError:
+                    await ctx.send(embed=get_embed('시간 초과', '게임이 취소되었습니다.', 0xFF0000))
+                    return
+
+                content = guess_msg.content.strip()
+
+                if content in ['0', 'x', 'X', '취소']:
+                    await ctx.send(embed=get_embed('취소되었습니다.', '', 0xFF0000))
+                    return
+
+                guess = int(content)
+                used += 1
+                last_guess = guess
+                remain = chance - used
+
+                if guess == answer:
+                    reward = int(n * reward_rate)
+
+                    async with cog.pool.acquire() as conn:
+                        async with conn.cursor(aiomysql.DictCursor) as cur:
+                            await cur.execute('SELECT money FROM userdata WHERE id = %s', ctx.author.id)
+                            row = await cur.fetchone()
+                            current_money = int(row['money'])
+                            await cur.execute(
+                                'UPDATE userdata SET money = %s WHERE id = %s',
+                                (str(current_money + reward), ctx.author.id)
+                            )
+
+                    await ctx.send(
+                        embed=get_embed(
+                            '정답!',
+                            f'{answer} | {used}/{chance}\n'
+                            f'+{reward:,}원',
+                            0x00FF00
+                        )
+                    )
+                    return
+
+                if remain <= 0:
+                    break
+
+                if guess < answer:
+                    hint = '⬆️ UP'
+                else:
+                    hint = '⬇️ DOWN'
+
+                await ctx.send(
+                    embed=get_embed(
+                        hint,
+                        f'{guess} 아님 | 남은 기회 {remain}번'
+                    )
+                )
+
+            async with cog.pool.acquire() as conn:
                 async with conn.cursor(aiomysql.DictCursor) as cur:
                     await cur.execute('SELECT money FROM userdata WHERE id = %s', ctx.author.id)
                     row = await cur.fetchone()
                     current_money = int(row['money'])
-                    await cur.execute('UPDATE userdata SET money = %s WHERE id = %s', (str(current_money - n), ctx.author.id))
+                    await cur.execute(
+                        'UPDATE userdata SET money = %s WHERE id = %s',
+                        (str(current_money - n), ctx.author.id)
+                    )
 
-                    if diff == 0:
-                        reward = n * level * 2
-                        message = f'정확합니다! 정답은 {number}입니다. {reward:,}원 지급!'
-                    elif diff == 1:
-                        reward = int(n * level * 1.5)
-                        message = f'1 차이입니다! 정답은 {number}입니다. {reward:,}원 지급!'
-                    elif diff == 2:
-                        reward = n * level
-                        message = f'2 차이입니다! 정답은 {number}입니다. {reward:,}원 지급!'
-                    else:
-                        reward = 0
-                        message = f'실패했습니다. 정답은 {number}입니다.'
+            await ctx.send(
+                embed=get_embed(
+                    '실패',
+                    f'정답 {answer}\n'
+                    f'-{n:,}원',
+                    0xFF0000
+                )
+            )
 
-                    if reward:
-                        await cur.execute('UPDATE userdata SET money = %s WHERE id = %s', (str(current_money - n + reward), ctx.author.id))
-
-            await ctx.send(embed=get_embed('숫자맞추기 결과', message))
         finally:
             self.end_game(ctx.author.id)
 
