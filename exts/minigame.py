@@ -38,12 +38,154 @@ class minigame(commands.Cog):
 
     def end_game(self, uid: int):
         self.gaming_users.discard(uid)
-
-    @commands.group(name='가위바위보', invoke_without_command=True)
+        
+    @commands.group(name='가위바위보', aliases=['가위바위보게임', 'rsp'], invoke_without_command=True)
     @commands.cooldown(1, 2, commands.BucketType.user)
-    async def rsp(self, ctx, n: typing.Union[str, None] = None):
-        await ctx.send(embed=get_embed('이 기능은 잠시 비활성화되었습니다.', '현재 재작성 과정에 있어 이 명령어는 임시 비활성화 상태입니다.', 0xFF0000))
+    async def rsp(self, ctx, n: typing.Union[str, int, None] = None):
+        money = await self.start_game(ctx.author.id)
+        try:
+            if not n:
+                await ctx.send(embed=get_embed('금액 입력', '걸 금액을 입력해주세요. `0`, `x`, `X`를 입력하면 취소됩니다.'))
 
+                def message_check(message):
+                    return message.author == ctx.author and message.channel == ctx.channel
+
+                try:
+                    msg = await self.client.wait_for('message', check=message_check, timeout=20)
+                except asyncio.TimeoutError:
+                    await ctx.send(embed=get_embed('시간 초과', '', 0xFF0000))
+                    return
+
+                n = msg.content
+                if n in ['0', 'X', 'x']:
+                    await ctx.send(embed=get_embed('취소되었습니다.', '', 0xFF0000))
+                    return
+
+            try:
+                n = int(n)
+            except Exception:
+                if n in ['올인', '전부', '전체', '최대']:
+                    n = money
+                else:
+                    raise errors.morethan1
+
+            if n <= 0:
+                raise errors.morethan1
+            if n > money:
+                raise errors.NoMoney
+
+            choices = ['가위', '바위', '보']
+            emojis = {
+                '가위': '✌️',
+                '바위': '✊',
+                '보': '✋',
+            }
+
+            win_table = {
+                '가위': '보',
+                '바위': '가위',
+                '보': '바위',
+            }
+
+            cog = self
+
+            class RSPView(discord.ui.View):
+                def __init__(self):
+                    super().__init__(timeout=30)
+                    self.finished = False
+                    self.message = None
+
+                async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                    if interaction.user.id != ctx.author.id:
+                        await interaction.response.send_message('이 게임은 명령어를 사용한 사람만 진행할 수 있습니다.', ephemeral=True)
+                        return False
+                    return True
+
+                def disable_all_buttons(self):
+                    for item in self.children:
+                        item.disabled = True
+
+                async def play(self, interaction: discord.Interaction, user_choice: str):
+                    if self.finished:
+                        return
+
+                    self.finished = True
+                    bot_choice = random.choice(choices)
+
+                    if user_choice == bot_choice:
+                        delta = 0
+                        result_title = '무승부'
+                        result_desc = '비겼습니다. 돈은 변하지 않습니다.'
+                        color = 0xCCFFFF
+                    elif win_table[user_choice] == bot_choice:
+                        delta = n
+                        result_title = '승리!'
+                        result_desc = f'{n:,}원을 획득했습니다.'
+                        color = 0x00FF00
+                    else:
+                        delta = -n
+                        result_title = '패배...'
+                        result_desc = f'{n:,}원을 잃었습니다.'
+                        color = 0xFF0000
+
+                    async with cog.pool.acquire() as conn:
+                        async with conn.cursor(aiomysql.DictCursor) as cur:
+                            if delta != 0:
+                                await cur.execute('SELECT money FROM userdata WHERE id = %s', (ctx.author.id,))
+                                row = await cur.fetchone()
+                                current_money = int(row['money'])
+                                await cur.execute(
+                                    'UPDATE userdata SET money = %s WHERE id = %s',
+                                    (str(current_money + delta), ctx.author.id)
+                                )
+
+                    self.disable_all_buttons()
+
+                    embed = get_embed(
+                        result_title,
+                        f'당신: {emojis[user_choice]} {user_choice}\n'
+                        f'알티: {emojis[bot_choice]} {bot_choice}\n\n'
+                        f'{result_desc}',
+                        color
+                    )
+
+                    await interaction.response.edit_message(embed=embed, view=self)
+                    self.stop()
+
+                @discord.ui.button(label='가위', emoji='✌️', style=discord.ButtonStyle.primary)
+                async def scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.play(interaction, '가위')
+
+                @discord.ui.button(label='바위', emoji='✊', style=discord.ButtonStyle.primary)
+                async def rock(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.play(interaction, '바위')
+
+                @discord.ui.button(label='보', emoji='✋', style=discord.ButtonStyle.primary)
+                async def paper(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await self.play(interaction, '보')
+
+            view = RSPView()
+            embed = get_embed(
+                '가위바위보',
+                f'금액: {n:,}원\n\n'
+                '이기면 건 돈만큼 추가로 얻고,\n'
+                '지면 건 돈만큼 잃고,\n'
+                '비기면 아무 일도 일어나지 않습니다.\n\n'
+                '아래 버튼 중 하나를 선택해주세요.'
+            )
+
+            msg = await ctx.send(embed=embed, view=view)
+            view.message = msg
+
+            timed_out = await view.wait()
+            if timed_out and not view.finished:
+                view.disable_all_buttons()
+                await msg.edit(embed=get_embed('시간 초과', '가위바위보가 취소되었습니다.', 0xFF0000), view=view)
+
+        finally:
+            self.end_game(ctx.author.id)
+
+    
     @commands.command(name='숫자맞추기', aliases=['숫맞', '업다운', '업다운게임'])
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def updown(self, ctx, n: typing.Union[str, int, None] = None):
