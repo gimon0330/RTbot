@@ -1,5 +1,7 @@
 import discord
 
+from utils.user_state import user_interaction
+
 
 class ConfirmView(discord.ui.View):
     def __init__(self, author_id: int, timeout: float = 30.0):
@@ -35,13 +37,20 @@ class ConfirmView(discord.ui.View):
         self.stop()
 
 
-async def ask_confirm(ctx, *, embed=None, content=None, timeout: float = 30.0):
-    view = ConfirmView(ctx.author.id, timeout=timeout)
-    message = await ctx.send(content=content, embed=embed, view=view)
-    await view.wait()
-    if view.value is None:
-        try:
-            await message.edit(view=view)
-        except discord.HTTPException:
-            pass
-    return view.value, message
+async def ask_confirm(ctx, *, embed=None, content=None, timeout: float = 30.0, reason: str = '버튼 응답 대기'):
+    async with user_interaction(ctx.bot, ctx.author.id, reason) as acquired:
+        if not acquired:
+            await ctx.send('이미 다른 작업을 진행 중입니다. 먼저 진행 중인 버튼/입력을 완료해주세요.')
+            return None, None
+
+        view = ConfirmView(ctx.author.id, timeout=timeout)
+        message = await ctx.send(content=content, embed=embed, view=view)
+        await view.wait()
+
+        if view.value is None:
+            try:
+                await message.edit(view=view)
+            except discord.HTTPException:
+                pass
+
+        return view.value, message
