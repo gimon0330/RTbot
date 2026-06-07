@@ -19,8 +19,3 @@ class minigame(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.pool = self.client.pool
-        self.checks = checks.checks(self.pool)
-        self.gaming_users = set()
-
-        for cmds in self.get_commands():
-           
